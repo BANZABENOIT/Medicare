@@ -431,6 +431,10 @@ export interface MedicationBatch {
   date_expiration: string;
   quantite_initiale: number;
   quantite_restante: number;
+  quantity_remaining?: number;
+  remaining_quantity?: number;
+  current_quantity?: number;
+  quantity?: number;
   prix_achat?: number;
   fournisseur?: string;
   statut?: "actif" | "perime" | "epuise" | "quarantaine";

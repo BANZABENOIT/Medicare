@@ -20,8 +20,8 @@ import {
   Prescription,
   PrescriptionItem,
   Specialty,
-  StockMovement,
   SystemNotification,
+
   User,
   UserRole,
 } from "../types";
@@ -97,6 +97,15 @@ export const isBackendActive = (): boolean => {
 };
 
 // Normalise un utilisateur renvoyé par le backend vers le type local de l'application.
+const FR_TO_EN_ROLES: Record<string, string> = {
+  medecin: "doctor",
+  infirmier: "doctor",
+  receptionniste: "receptionist",
+  pharmacien: "pharmacist",
+  laborantin: "lab_tech",
+  caissier: "cashier",
+};
+
 const normalizeUser = (raw: any): User | null => {
   if (!raw) return null;
   const role = String(
@@ -116,21 +125,23 @@ const normalizeUser = (raw: any): User | null => {
     "laborantin",
     "caissier",
   ];
-  const roleNorm = validRoles.includes(role as UserRole)
-    ? (role as UserRole)
-    : role.includes("pharm")
-      ? "pharmacist"
-      : role.includes("lab")
-        ? "lab_tech"
-        : role.includes("rec")
-          ? "receptionist"
-          : role.includes("doc") || role.includes("med")
-            ? "doctor"
-            : role.includes("admin")
-              ? "admin"
-              : role.includes("cash") || role.includes("cais")
-                ? "cashier"
-                : "doctor";
+  const canonical =
+    validRoles.includes(role as UserRole)
+      ? (role as UserRole)
+      : role.includes("pharm")
+        ? "pharmacist"
+        : role.includes("lab")
+          ? "lab_tech"
+          : role.includes("rec")
+            ? "receptionist"
+            : role.includes("doc") || role.includes("med")
+              ? "doctor"
+              : role.includes("admin")
+                ? "admin"
+                : role.includes("cash") || role.includes("cais")
+                  ? "cashier"
+                  : "doctor";
+  const roleNorm = (FR_TO_EN_ROLES[canonical] || canonical) as UserRole;
   return {
     id: String(raw.id ?? raw.pk ?? raw.user_id ?? ""),
     nom: String(
@@ -552,17 +563,16 @@ class DjangoApiClient {
   prescriptionItems =
     this.createResource<PrescriptionItem>("prescription-items");
 
-  // 10. Pharmacie (api/medications/, api/medication-batches/, api/stock-movements/)
+  // 10. Pharmacie (api/medications/, api/medication-batches/)
   medications = this.createResource<Medication>("medications");
   medicationBatches =
     this.createResource<MedicationBatch>("medication-batches");
-  stockMovements = this.createResource<StockMovement>("stock-movements");
 
   // 11. Laboratoire (api/lab/tests/, api/lab/requests/, api/lab/results/)
   lab = {
     tests: this.createResource<LabTest>("lab/tests"),
     requests: this.createResource<LabRequest>("lab/requests"),
-    results: this.createResource<LabResultItem>("lab/results"),
+    results: this.createResource<any>("lab/results"),
   };
 
   // 12. Facturation (api/billing-items/, api/invoices/, api/invoice-items/, api/payments/)

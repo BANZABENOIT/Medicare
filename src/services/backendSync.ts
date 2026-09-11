@@ -4,12 +4,15 @@ import {
   Consultation,
   Doctor,
   Invoice,
+  InvoiceItem,
   LabRequest,
   MedicalService,
   Medication,
   Patient,
   Payment,
   Prescription,
+  StockMovement,
+  SystemNotification,
 } from "../types";
 import {
   djangoApi,
@@ -42,6 +45,16 @@ const pickBool = (obj: any, keys: string[]): boolean => {
 const pickArr = (obj: any, keys: string[]): any[] => {
   const v = pick(obj, keys);
   return Array.isArray(v) ? v : [];
+};
+
+// Normalise une valeur texte backend (ex. "A, B") ou un tableau en liste propre.
+const splitList = (obj: any, keys: string[]): string[] => {
+  const v = pick(obj, keys, "");
+  if (Array.isArray(v)) return v.map(s).filter(Boolean);
+  return String(v)
+    .split(/[,;]/)
+    .map((x) => x.trim())
+    .filter(Boolean);
 };
 
 const idStr = (obj: any): string =>
@@ -79,6 +92,20 @@ const fmtTime = (v: any): string => {
   if (m) return `${m[1]}:${m[2]}`;
   const m2 = t.match(/^\d{1,2}:\d{2}/);
   return m2 ? m2[0] : t;
+};
+
+const calculateAge = (birthDate: string): number | undefined => {
+  if (!birthDate) return undefined;
+  const birth = new Date(birthDate);
+  if (Number.isNaN(birth.getTime())) return undefined;
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const beforeBirthday =
+    today.getMonth() < birth.getMonth() ||
+    (today.getMonth() === birth.getMonth() &&
+      today.getDate() < birth.getDate());
+  if (beforeBirthday) age -= 1;
+  return Math.max(0, age);
 };
 
 const APPT_STATUTS: Appointment["statut"][] = [
@@ -242,7 +269,9 @@ const mapPatient = (o: any): Patient => ({
   nom: s(pick(o, ["nom", "nom_famille", "last_name"])).toUpperCase(),
   prenom: s(pick(o, ["prenom", "first_name"])).toUpperCase(),
   sexe: (() => {
-    const g = String(pick(o, ["sexe", "sex", "genre"], "")).toUpperCase();
+    const g = String(
+      pick(o, ["sexe", "sex", "genre", "gender"], ""),
+    ).toUpperCase();
     return ["M", "MALE", "HOMME", "H"].includes(g)
       ? "M"
       : ["F", "FEMALE", "FEMME"].includes(g)
@@ -251,6 +280,9 @@ const mapPatient = (o: any): Patient => ({
   })(),
   date_naissance: s(
     pick(o, ["date_naissance", "birth_date", "date_of_birth", "naissance"]),
+  ),
+  age: calculateAge(
+    s(pick(o, ["date_naissance", "birth_date", "date_of_birth", "naissance"])),
   ),
   telephone: s(
     pick(
@@ -276,18 +308,37 @@ const mapPatient = (o: any): Patient => ({
   personne_urgence_tel: s(
     pick(o, ["personne_urgence_tel", "contact_urgence_tel", "emergency_phone"]),
   ),
+  personne_urgence_lien: s(
+    pick(o, [
+      "personne_urgence_lien",
+      "contact_urgence_lien",
+      "emergency_contact_relationship",
+    ]),
+  ),
   groupe_sanguin: s(
     pick(o, ["groupe_sanguin", "blood_group"], "Inconnu"),
   ) as Patient["groupe_sanguin"],
-  allergies: pickArr(o, ["allergies"]).map(s),
-  antecedents_medicaux: pickArr(o, ["antecedents_medicaux", "antecedents"]).map(
-    s,
-  ),
+  allergies: splitList(o, ["allergies"]),
+  antecedents_medicaux: splitList(o, ["antecedents_medicaux", "antecedents"]),
+  antecedents_chirurgicaux: splitList(o, ["antecedents_chirurgicaux"]),
+  antecedents_familiaux: splitList(o, ["antecedents_familiaux"]),
+  observations: s(pick(o, ["observations", "notes"])),
   assure: pickBool(o, ["assure", "assure_", "is_insured"]),
-  statut:
-    String(pick(o, ["statut", "status"], "actif")) === "archive"
+  assurance_nom: s(
+    pick(o, ["assurance_nom", "assurance_name", "insurance_name"]),
+  ),
+  assurance_numero: s(
+    pick(o, ["assurance_numero", "assurance_number", "insurance_number"]),
+  ),
+  derniere_visite: fmtDate(pick(o, ["derniere_visite", "last_visit"])),
+  statut: (() => {
+    const st = String(pick(o, ["statut", "status"], "actif")).toUpperCase();
+    return st === "ARCHIVED" || st === "ARCHIVE"
       ? "archive"
-      : "actif",
+      : st === "INACTIVE" || st === "INACTIF"
+        ? "archive"
+        : "actif";
+  })(),
   date_creation: s(pick(o, ["date_creation", "created_at", "created"])),
 });
 
@@ -342,10 +393,10 @@ const mapDoctor = (o: any): Doctor => ({
       typeof o.user === "object" ? pick(o.user, ["matricule"]) : "",
     ),
   ),
-  statut:
-    String(pick(o, ["statut", "status"], "actif")) === "inactif"
-      ? "inactif"
-      : "actif",
+  statut: (() => {
+    const st = String(pick(o, ["statut", "status"], "actif")).toUpperCase();
+    return st === "INACTIVE" || st === "INACTIF" ? "inactif" : "actif";
+  })(),
 });
 
 const mapService = (o: any): MedicalService => ({
@@ -432,6 +483,10 @@ const mapConsultation = (o: any): Consultation => ({
   examen_physique: s(pick(o, ["examen_physique", "examen"])),
   diagnostic_principal: s(pick(o, ["diagnostic_principal", "diagnostic"])),
   code_cim10: s(pick(o, ["code_cim10", "cim10"])),
+  arret_travail_jours: (() => {
+    const v = pick(o, ["arret_travail_jours", "work_off_days"], undefined);
+    return v === undefined ? undefined : Number(v) || 0;
+  })(),
   plan_traitement: s(
     pick(o, ["plan_traitement", "traitement", "treatment_plan"]),
   ),
@@ -449,16 +504,23 @@ const mapPrescription = (o: any): Prescription => ({
   doctor_specialite: s(pick(o, ["doctor_specialite"])),
   date: fmtDate(pick(o, ["date", "prescription_date"])),
   statut: mapPrescriptionStatut(pick(o, ["statut", "status"], "validee")),
+  delivree_par: s(pick(o, ["delivree_par", "dispensed_by"])),
+  date_delivrance: fmtDate(pick(o, ["date_delivrance", "dispensed_at"])),
   items: pickArr(o, ["items", "lignes", "medicaments"]).map((it: any) => ({
     id:
       idStr(it) || `rx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     medicament_nom: s(pick(it, ["medicament_nom", "nom", "medicament"])),
-    forme: s(pick(it, ["forme"])),
+    forme: s(pick(it, ["forme", "form"])),
     dosage: s(pick(it, ["dosage"])),
     posologie: s(pick(it, ["posologie"])),
-    frequence: s(pick(it, ["frequence"])),
-    duree: s(pick(it, ["duree"])),
-    quantite_prescrite: pickNum(it, ["quantite_prescrite", "quantite"], 1),
+    frequence: s(pick(it, ["frequence", "frequency"])),
+    duree: s(pick(it, ["duree", "duration"])),
+    quantite_prescrite: pickNum(
+      it,
+      ["quantite_prescrite", "quantite", "quantity"],
+      1,
+    ),
+    delivre: pickBool(it, ["delivre"]) || Number(it.dispensed_quantity) > 0,
   })),
   date_creation: s(pick(o, ["date_creation", "created_at"])),
 });
@@ -486,15 +548,31 @@ const mapLab = (o: any): LabRequest => ({
   ),
   date_demande: fmtDate(pick(o, ["date_demande", "date", "requested_at"])),
   date_prelevement: fmtDate(pick(o, ["date_prelevement", "date_collecte"])),
-  date_validation: s(pick(o, ["date_validation"])),
-  resultats: pickArr(o, ["resultats", "results"]).map((r: any) => ({
-    parametre: s(pick(r, ["parametre", "parameter", "nom"])),
-    valeur: pick(r, ["valeur", "value"], ""),
-    unite: s(pick(r, ["unite", "unit"])),
-    normes: s(pick(r, ["normes", "reference"])),
-    est_anormal: pickBool(r, ["est_anormal", "anormal"]),
-  })),
-  conclusion: s(pick(o, ["conclusion"])),
+  date_validation: s(pick(o, ["date_validation", "validated_at"])),
+  resultats: (() => {
+    const direct = pickArr(o, ["resultats", "results"]);
+    if (direct.length)
+      return direct.map((r: any) => ({
+        parametre: s(pick(r, ["parametre", "parameter", "nom"])),
+        valeur: pick(r, ["valeur", "value"], ""),
+        unite: s(pick(r, ["unite", "unit"])),
+        normes: s(pick(r, ["normes", "reference", "reference_range"])),
+        est_anormal: pickBool(r, ["est_anormal", "anormal", "is_abnormal"]),
+      }));
+    if (Array.isArray(o?.result?.lines)) {
+      return o.result.lines.map((r: any) => ({
+        parametre: s(pick(r, ["parametre", "parameter", "nom"])),
+        valeur: pick(r, ["valeur", "value"], ""),
+        unite: s(pick(r, ["unite", "unit"])),
+        normes: s(
+          pick(r, ["normes", "reference", "reference_range", "normes_string"]),
+        ),
+        est_anormal: pickBool(r, ["est_anormal", "anormal", "is_abnormal"]),
+      }));
+    }
+    return [];
+  })(),
+  conclusion: s(pick(o, ["conclusion"], o?.result?.comment || "")),
   date_creation: s(pick(o, ["date_creation", "created_at"])),
 });
 
@@ -508,7 +586,7 @@ const mapMedication = (o: any): Medication => ({
   categorie: s(
     typeof o.category === "object"
       ? pick(o.category, ["nom", "name"])
-      : pick(o, ["categorie", "category", "category_name"]),
+      : pick(o, ["categorie", "category", "category_name", "category_label"]),
   ),
   prix_unitaire: pickNum(o, ["prix_unitaire", "prix", "unit_price", "price"]),
   stock_actuel: pickNum(o, [
@@ -524,15 +602,38 @@ const mapMedication = (o: any): Medication => ({
     ["seuil_alerte", "alerte_stock", "alerte", "minimum_stock"],
     5,
   ),
-  emplacement: s(pick(o, ["emplacement", "location", "storage_location"])),
-  numero_lot: s(pick(o, ["numero_lot", "lot_number", "batch_number"])),
+  emplacement: s(
+    typeof o.location === "object"
+      ? pick(o.location, ["nom", "name", "label"])
+      : pick(o, [
+          "emplacement",
+          "location",
+          "storage_location",
+          "location_name",
+        ]),
+  ),
+  numero_lot: s(
+    pick(
+      o,
+      ["numero_lot", "lot_number", "batch_number"],
+      typeof o.batch === "object"
+        ? pick(o.batch, ["numero_lot", "lot_number", "batch_number"])
+        : "",
+    ),
+  ),
   date_peremption: s(
-    pick(o, [
-      "date_peremption",
-      "date_expiration",
-      "expiration_date",
-      "expiry_date",
-    ]),
+    pick(
+      o,
+      ["date_peremption", "date_expiration", "expiration_date", "expiry_date"],
+      typeof o.batch === "object"
+        ? pick(o.batch, [
+            "date_peremption",
+            "date_expiration",
+            "expiration_date",
+            "expiry_date",
+          ])
+        : "",
+    ),
   ),
   sur_ordonnance_uniquement: pickBool(o, [
     "sur_ordonnance_uniquement",
@@ -554,7 +655,9 @@ const mapInvoice = (o: any): Invoice => ({
       idStr(it) ||
       `inv-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     description: s(pick(it, ["description", "designation", "libelle"])),
-    type: "consultation" as const,
+    type: (it?.medication !== undefined && it?.medication !== null
+      ? "medicament"
+      : pick(it, ["item_type", "type"], "autre")) as InvoiceItem["type"],
     quantite: pickNum(it, ["quantite", "qte", "quantity"], 1),
     prix_unitaire: pickNum(it, ["prix_unitaire", "prix", "pu", "unit_price"]),
     total: pickNum(it, ["total", "sous_total"]),
@@ -597,6 +700,93 @@ const mapAudit = (o: any): AuditLog => ({
   date: s(pick(o, ["date"])),
   heure: s(pick(o, ["heure", "time"])),
 });
+
+const STOCK_TYPES: Record<string, StockMovement["type"]> = {
+  IN: "entree",
+  OUT: "sortie",
+  RETURN: "entree",
+  DISPENSED: "delivrance",
+  DELIVERY: "delivrance",
+  ADJUSTMENT: "ajustement",
+  EXPIRED: "perime",
+  DAMAGED: "perte",
+};
+const mapStockMovement = (o: any): StockMovement => ({
+  id: idStr(o),
+  medicament_id: relationId(o, [
+    "medication",
+    "medicament_id",
+    "medication_id",
+  ]),
+  medicament_nom: s(
+    pick(
+      o,
+      ["medicament_nom", "medication_nom", "medication_name", "nom"],
+      typeof o.medication === "object"
+        ? pick(o.medication, ["nom", "name"])
+        : "",
+    ),
+  ),
+  type: (() => {
+    const raw = s(
+      pick(o, ["type", "movement_type", "type_mouvement"]),
+    ).toUpperCase();
+    return (STOCK_TYPES[raw] ||
+      raw.toLowerCase() ||
+      "ajustement") as StockMovement["type"];
+  })(),
+  quantite: (() => {
+    const quantity = Math.abs(
+      pickNum(o, ["quantite", "quantity", "amount"], 0),
+    );
+    const raw = s(
+      pick(o, ["type", "movement_type", "type_mouvement"]),
+    ).toUpperCase();
+    return raw === "IN" || raw === "RETURN" || raw === "ENTREE"
+      ? quantity
+      : -quantity;
+  })(),
+  stock_avant: (() => {
+    const v = pick(o, ["stock_avant", "stock_before"], undefined);
+    return v === undefined
+      ? undefined
+      : pickNum(o, ["stock_avant", "stock_before"], 0);
+  })(),
+  stock_apres: (() => {
+    const v = pick(o, ["stock_apres", "stock_after"], undefined);
+    return v === undefined
+      ? undefined
+      : pickNum(o, ["stock_apres", "stock_after"], 0);
+  })(),
+  motif: s(pick(o, ["motif", "reason"])),
+  reference_document: s(pick(o, ["reference_document", "reference"])),
+  user_nom: s(pick(o, ["user_nom", "performed_by_nom"])),
+  effectue_par_nom: s(pick(o, ["effectue_par_nom", "par"])),
+  date: fmtDate(pick(o, ["date", "movement_date"])),
+  heure: fmtTime(pick(o, ["heure", "time", "movement_date"])),
+});
+
+const NOTIF_TYPES: SystemNotification["type"][] = [
+  "info",
+  "succes",
+  "alerte",
+  "urgent",
+];
+const mapNotification = (o: any): SystemNotification => {
+  const type = s(pick(o, ["type", "niveau"])).toLowerCase();
+  return {
+    id: idStr(o),
+    titre: s(pick(o, ["titre", "title"])),
+    message: s(pick(o, ["message"])),
+    type: (NOTIF_TYPES as string[]).includes(type)
+      ? (type as SystemNotification["type"])
+      : "info",
+    user_id: relationId(o, ["user_id", "user"]),
+    lu: pickBool(o, ["lu", "is_read", "read"]),
+    date_creation: s(pick(o, ["date_creation", "created_at"])),
+    lien: s(pick(o, ["lien", "link"])) || undefined,
+  };
+};
 
 // ---------- LOADER ----------
 interface ModuleDef<T> {
@@ -672,6 +862,12 @@ const MODULES: ModuleDef<any>[] = [
     fetch: () => djangoApi.audit.list(),
     map: mapAudit,
     storageKey: "medicare_audit_logs_v2",
+  },
+  {
+    key: "notifications",
+    fetch: () => djangoApi.notifications.list(),
+    map: mapNotification,
+    storageKey: "medicare_notifications_v2",
   },
 ];
 
@@ -774,7 +970,26 @@ const enrichBackendNames = async (
   //    (MedicationBatch), les listes Medication n'ont pas de champ stock.
   if ((lists.medications || []).length) {
     try {
-      const batches = normalizeList(await djangoApi.medicationBatches.list());
+      const remoteBatches = normalizeList(
+        await djangoApi.medicationBatches.list(),
+      );
+      const embeddedBatches = (rawLists.medications || []).flatMap(
+        (medication: any) => {
+          const medicationId = idStr(medication);
+          const batches =
+            medication.batches ||
+            medication.lots ||
+            medication.medication_batches ||
+            [];
+          return Array.isArray(batches)
+            ? batches.map((batch: any) => ({
+                ...batch,
+                medication: batch.medication || medicationId,
+              }))
+            : [];
+        },
+      );
+      const batches = [...remoteBatches, ...embeddedBatches];
       const stockByMed = new Map<string, number>();
       const firstBatchByMed = new Map<string, any>();
       for (const b of batches) {
@@ -815,6 +1030,33 @@ const enrichBackendNames = async (
                 "expiration_date",
                 "expiry_date",
               ]),
+            );
+          }
+        }
+        const rawMedication = (rawLists.medications || []).find(
+          (raw: any) => String(idStr(raw)) === String(m.id),
+        );
+        if (rawMedication) {
+          if (!m.categorie) {
+            m.categorie = s(
+              typeof rawMedication.category === "object"
+                ? pick(rawMedication.category, ["nom", "name", "label"])
+                : pick(rawMedication, [
+                    "category",
+                    "category_name",
+                    "categorie",
+                  ]),
+            );
+          }
+          if (!m.emplacement) {
+            m.emplacement = s(
+              typeof rawMedication.location === "object"
+                ? pick(rawMedication.location, ["nom", "name", "label"])
+                : pick(rawMedication, [
+                    "location",
+                    "storage_location",
+                    "emplacement",
+                  ]),
             );
           }
         }
@@ -1076,7 +1318,22 @@ export const syncPatientCreate = async (local: any): Promise<void> => {
         date_of_birth: local.date_naissance || null,
         phone: local.telephone,
         email: local.email,
-        address: [local.adresse, local.ville].filter(Boolean).join(", "),
+        address: local.adresse,
+        ville: local.ville,
+        assure: Boolean(local.assure),
+        assurance_nom: local.assurance_nom,
+        assurance_numero: local.assurance_numero,
+        observations: local.observations,
+        derniere_visite: local.derniere_visite || null,
+        antecedents_medicaux: Array.isArray(local.antecedents_medicaux)
+          ? local.antecedents_medicaux.join(", ")
+          : local.antecedents_medicaux,
+        antecedents_chirurgicaux: Array.isArray(local.antecedents_chirurgicaux)
+          ? local.antecedents_chirurgicaux.join(", ")
+          : local.antecedents_chirurgicaux,
+        antecedents_familiaux: Array.isArray(local.antecedents_familiaux)
+          ? local.antecedents_familiaux.join(", ")
+          : local.antecedents_familiaux,
         blood_group:
           local.groupe_sanguin === "Inconnu" ? "" : local.groupe_sanguin,
         allergies: Array.isArray(local.allergies)
@@ -1209,6 +1466,10 @@ export const syncConsultationCreate = async (local: any): Promise<void> => {
         symptoms: Array.isArray(local.symptomes)
           ? local.symptomes.join(", ")
           : local.symptomes,
+        histoire_maladie: local.histoire_maladie,
+        examen_physique: local.examen_physique,
+        code_cim10: local.code_cim10,
+        arret_travail_jours: local.arret_travail_jours,
         temperature: c.temperature,
         weight: c.poids,
         height: c.taille,
@@ -1319,12 +1580,16 @@ export const syncMedicationCreate = async (local: any): Promise<void> => {
   const backend = await safeSend(() =>
     djangoApi.medications.create(
       stripEmpty({
+        code: local.code,
         name: local.nom,
         generic_name: local.dci,
         form: local.forme,
         dosage: local.dosage,
         category: local.categorie,
         location: local.emplacement,
+        prescription_only: Boolean(
+          local.ordonnance_obligatoire || local.sur_ordonnance_uniquement,
+        ),
         unit: "unité",
         minimum_stock: local.seuil_alerte,
         unit_price: local.prix_unitaire,
@@ -1448,29 +1713,51 @@ export const syncPaymentCreate = async (local: any): Promise<void> => {
 };
 
 // ---- Mouvements de stock ----
+// Le backend expose les lots, mais pas de route stock-movements. Une entrée
+// crée donc un lot et une sortie ajuste la quantité restante du premier lot.
 export const syncStockMovementCreate = async (local: any): Promise<void> => {
-  if (!local?.id) return;
-  const medId = backendId("medications", local.medicament_id);
-  if (medId === undefined) return;
-  const typeMap: Record<string, string> = {
-    entree: "IN",
-    sortie: "OUT",
-    delivrance: "OUT",
-    ajustement: "ADJUSTMENT",
-    perime: "EXPIRED",
-    perte: "DAMAGED",
-  };
-  await safeSend(() =>
-    djangoApi.stockMovements.create(
-      stripEmpty({
-        medication: medId,
-        movement_type: typeMap[local.type] || "ADJUSTMENT",
-        quantity: Math.abs(Number(local.quantite) || 0),
-        reason: local.motif || local.reason,
-        reference: local.reference_document || local.reference,
-      }),
-    ),
+  if (!local?.medicament_id) return;
+  const medicationId = backendId("medications", local.medicament_id);
+  if (medicationId === undefined) return;
+
+  const batches = normalizeList(await djangoApi.medicationBatches.list());
+  const matching = batches.filter(
+    (batch: any) =>
+      relationId(batch, ["medication", "medication_id", "medicament"]) ===
+      String(medicationId),
   );
+  const quantity = Math.abs(Number(local.quantite) || 0);
+  if (!quantity) return;
+
+  if (local.type === "entree" || local.type === "ajustement") {
+    await safeSend(() =>
+      djangoApi.medicationBatches.create(
+        stripEmpty({
+          medication: medicationId,
+          batch_number: local.reference_document || `LOT-${Date.now()}`,
+          quantity,
+          expiration_date: local.date_peremption,
+        }),
+      ),
+    );
+  } else {
+    const batch = matching[0];
+    if (!batch?.id) return;
+    const current = Number(
+      batch.quantity_remaining ??
+        batch.remaining_quantity ??
+        batch.current_quantity ??
+        batch.quantity ??
+        0,
+    );
+    const remaining = Math.max(0, current - quantity);
+    await safeSend(() =>
+      djangoApi.medicationBatches.partialUpdate(batch.id, {
+        quantity_remaining: remaining,
+        remaining_quantity: remaining,
+      }),
+    );
+  }
   await refreshAfterBackendWrite();
 };
 
@@ -1548,7 +1835,22 @@ const buildUpdatePayload = (kind: string, local: any): Record<string, any> => {
         date_of_birth: local.date_naissance || null,
         phone: local.telephone,
         email: local.email,
-        address: [local.adresse, local.ville].filter(Boolean).join(", "),
+        address: local.adresse,
+        ville: local.ville,
+        assure: Boolean(local.assure),
+        assurance_nom: local.assurance_nom,
+        assurance_numero: local.assurance_numero,
+        observations: local.observations,
+        derniere_visite: local.derniere_visite || null,
+        antecedents_medicaux: Array.isArray(local.antecedents_medicaux)
+          ? local.antecedents_medicaux.join(", ")
+          : local.antecedents_medicaux,
+        antecedents_chirurgicaux: Array.isArray(local.antecedents_chirurgicaux)
+          ? local.antecedents_chirurgicaux.join(", ")
+          : local.antecedents_chirurgicaux,
+        antecedents_familiaux: Array.isArray(local.antecedents_familiaux)
+          ? local.antecedents_familiaux.join(", ")
+          : local.antecedents_familiaux,
         blood_group:
           local.groupe_sanguin === "Inconnu" ? "" : local.groupe_sanguin,
         allergies: Array.isArray(local.allergies)
@@ -1583,6 +1885,10 @@ const buildUpdatePayload = (kind: string, local: any): Record<string, any> => {
         symptoms: Array.isArray(local.symptomes)
           ? local.symptomes.join(", ")
           : local.symptomes,
+        histoire_maladie: local.histoire_maladie,
+        examen_physique: local.examen_physique,
+        code_cim10: local.code_cim10,
+        arret_travail_jours: local.arret_travail_jours,
         temperature: local.constantes?.temperature,
         weight: local.constantes?.poids,
         height: local.constantes?.taille,
@@ -1598,21 +1904,27 @@ const buildUpdatePayload = (kind: string, local: any): Record<string, any> => {
       return stripEmpty({
         instructions: local.instructions_generales,
         status: BACKEND_PRESC_STATUTS[local.statut] || "VALIDATED",
+        delivree_par: local.delivree_par,
+        date_delivrance: local.date_delivrance,
       });
     case "lab":
       return stripEmpty({
-        result: local.resultats,
-        conclusion: local.conclusion,
         status:
           BACKEND_LAB_STATUTS[String(local.statut || "").toLowerCase()] ||
           "REQUESTED",
       });
     case "medications":
       return stripEmpty({
+        code: local.code,
         name: local.nom,
         generic_name: local.dci,
         form: local.forme,
         dosage: local.dosage,
+        category: local.categorie,
+        location: local.emplacement,
+        prescription_only: Boolean(
+          local.ordonnance_obligatoire || local.sur_ordonnance_uniquement,
+        ),
         unit: "unité",
         minimum_stock: local.seuil_alerte,
         unit_price: local.prix_unitaire,
@@ -1680,6 +1992,41 @@ export const syncEntityUpdate = async (
   const payload = buildUpdatePayload(kind, local);
   if (!Object.keys(payload).length) return;
   await safeSend(() => resource.partialUpdate(ref, payload));
+
+  // Résultats de laboratoire structurés : on ne crée le résultat qu'une seule
+  // fois (référence locale), en complétant au besoin les lignes + conclusion.
+  if (
+    kind === "lab" &&
+    Array.isArray(local.resultats) &&
+    local.resultats.length
+  ) {
+    const resultRef = getRef("lab_results", local.id);
+    if (resultRef !== undefined) {
+      await safeSend(() =>
+        djangoApi.lab.results.partialUpdate(resultRef as number, {
+          comment: local.conclusion || "",
+        }),
+      );
+    } else {
+      const created = await safeSend(() =>
+        djangoApi.lab.results.create({
+          lab_request: ref as number,
+          result: "",
+          comment: local.conclusion || "",
+          lines: local.resultats.map((r: any) => ({
+            parameter: s(r?.parametre),
+            value: s(r?.valeur),
+            unit: s(r?.unite),
+            reference_range: s(r?.normes),
+            is_abnormal: Boolean(r?.est_anormal),
+            remark: s(r?.remarque),
+          })),
+        }),
+      );
+      if (created?.id) setRef("lab_results", local.id, created.id);
+    }
+  }
+
   await refreshAfterBackendWrite();
 };
 
