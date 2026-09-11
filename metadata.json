@@ -1,0 +1,5 @@
+{
+  "name": "MediCare Connect",
+  "description": "Système intégré de gestion médicale : patients, rendez-vous, consultations, prescriptions, laboratoire, pharmacie et facturation.",
+  "requestFramePermissions": []
+}
