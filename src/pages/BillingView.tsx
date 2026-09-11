@@ -1,25 +1,30 @@
-import React, { useState, useEffect } from 'react';
 import {
-  CreditCard,
-  Plus,
-  Search,
-  Printer,
   CheckCircle2,
   Clock,
   DollarSign,
+  Plus,
+  Printer,
   Receipt,
+  Search,
   Trash2,
-  User,
-  ShieldCheck,
-  TrendingUp,
-  AlertCircle,
-  FileSpreadsheet,
-  Wallet
-} from 'lucide-react';
-import { apiService } from '../services/apiService';
-import { syncInvoiceCreate, syncPaymentCreate } from '../services/backendSync';
-import { toast } from '../components/ui/Toast';
-import { Invoice, Payment, Patient, MedicalService, InvoiceItem, ClinicSettings } from '../types';
+  Wallet,
+} from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { toast } from "../components/ui/Toast";
+import { apiService } from "../services/apiService";
+import {
+  refreshAfterBackendWrite,
+  syncInvoiceCreate,
+  syncPaymentCreate,
+} from "../services/backendSync";
+import {
+  ClinicSettings,
+  Invoice,
+  InvoiceItem,
+  MedicalService,
+  Patient,
+  Payment,
+} from "../types";
 
 interface BillingViewProps {
   onPrintDocument?: (type: any, data: any, title: string) => void;
@@ -28,38 +33,41 @@ interface BillingViewProps {
 
 export const BillingView: React.FC<BillingViewProps> = ({
   onPrintDocument,
-  settings
+  settings,
 }) => {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [services, setServices] = useState<MedicalService[]>([]);
-  
-  const [activeTab, setActiveTab] = useState<'invoices' | 'payments'>('invoices');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+
+  const [activeTab, setActiveTab] = useState<"invoices" | "payments">(
+    "invoices",
+  );
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
 
   // Payment Recording Modal
-  const [selectedInvoiceForPayment, setSelectedInvoiceForPayment] = useState<Invoice | null>(null);
+  const [selectedInvoiceForPayment, setSelectedInvoiceForPayment] =
+    useState<Invoice | null>(null);
   const [paymentForm, setPaymentForm] = useState({
     montant: 0,
-    mode: 'especes' as Payment['mode'],
-    reference_transaction: '',
-    notes: ''
+    mode: "especes" as Payment["mode"],
+    reference_transaction: "",
+    notes: "",
   });
 
   // New Invoice Modal
   const [isCreatingInvoice, setIsCreatingInvoice] = useState(false);
   const [newInvoiceData, setNewInvoiceData] = useState({
-    patient_id: '',
+    patient_id: "",
     prise_en_charge_part_assurance: 0,
     items: [] as {
-      type: InvoiceItem['type'];
+      type: InvoiceItem["type"];
       description: string;
       quantite: number;
       prix_unitaire: number;
       total: number;
-    }[]
+    }[],
   });
 
   const loadData = () => {
@@ -72,8 +80,9 @@ export const BillingView: React.FC<BillingViewProps> = ({
   useEffect(() => {
     loadData();
     const handleUpdate = () => loadData();
-    window.addEventListener('medicare_data_updated', handleUpdate);
-    return () => window.removeEventListener('medicare_data_updated', handleUpdate);
+    window.addEventListener("medicare_data_updated", handleUpdate);
+    return () =>
+      window.removeEventListener("medicare_data_updated", handleUpdate);
   }, []);
 
   const totalCollected = invoices.reduce((sum, i) => sum + i.montant_paye, 0);
@@ -84,9 +93,9 @@ export const BillingView: React.FC<BillingViewProps> = ({
     setSelectedInvoiceForPayment(inv);
     setPaymentForm({
       montant: inv.reste_a_payer,
-      mode: 'especes',
-      reference_transaction: '',
-      notes: ''
+      mode: "especes",
+      reference_transaction: "",
+      notes: "",
     });
   };
 
@@ -99,20 +108,29 @@ export const BillingView: React.FC<BillingViewProps> = ({
       Number(paymentForm.montant),
       paymentForm.mode,
       paymentForm.reference_transaction,
-      'Caissier Principal',
-      paymentForm.notes
+      "Caissier Principal",
+      paymentForm.notes,
     );
 
     setSelectedInvoiceForPayment(null);
-    if (newPayment) syncPaymentCreate(newPayment);
+    if (newPayment)
+      void syncPaymentCreate(newPayment).then(refreshAfterBackendWrite);
 
     // Auto open print receipt
     if (onPrintDocument && newPayment) {
-      onPrintDocument('payment_receipt', newPayment, 'Reçu d’Encaissement Médical');
+      onPrintDocument(
+        "payment_receipt",
+        newPayment,
+        "Reçu d’Encaissement Médical",
+      );
     }
   };
 
-  const handleAddItemToInvoice = (desc: string, price: number, type: InvoiceItem['type'] = 'acte') => {
+  const handleAddItemToInvoice = (
+    desc: string,
+    price: number,
+    type: InvoiceItem["type"] = "acte",
+  ) => {
     setNewInvoiceData({
       ...newInvoiceData,
       items: [
@@ -122,9 +140,9 @@ export const BillingView: React.FC<BillingViewProps> = ({
           description: desc,
           quantite: 1,
           prix_unitaire: price,
-          total: price
-        }
-      ]
+          total: price,
+        },
+      ],
     });
   };
 
@@ -135,17 +153,23 @@ export const BillingView: React.FC<BillingViewProps> = ({
   };
 
   const calculateInvoiceTotals = () => {
-    const rawTotal = newInvoiceData.items.reduce((sum, it) => sum + it.total, 0);
-    const insurancePart = (rawTotal * (newInvoiceData.prise_en_charge_part_assurance || 0)) / 100;
+    const rawTotal = newInvoiceData.items.reduce(
+      (sum, it) => sum + it.total,
+      0,
+    );
+    const insurancePart =
+      (rawTotal * (newInvoiceData.prise_en_charge_part_assurance || 0)) / 100;
     const patientPart = rawTotal - insurancePart;
     return { rawTotal, insurancePart, patientPart };
   };
 
   const handleCreateInvoice = (e: React.FormEvent) => {
     e.preventDefault();
-    const pat = patients.find(p => p.id === newInvoiceData.patient_id);
+    const pat = patients.find((p) => p.id === newInvoiceData.patient_id);
     if (!pat || newInvoiceData.items.length === 0) {
-      toast.error('Veuillez sélectionner un patient et ajouter au moins une prestation.');
+      toast.error(
+        "Veuillez sélectionner un patient et ajouter au moins une prestation.",
+      );
       return;
     }
 
@@ -155,8 +179,8 @@ export const BillingView: React.FC<BillingViewProps> = ({
       patient_id: pat.id,
       patient_nom: `${pat.nom} ${pat.prenom}`,
       patient_numero: pat.numero,
-      date_emission: new Date().toISOString().split('T')[0],
-      statut: 'emise',
+      date_emission: new Date().toISOString().split("T")[0],
+      statut: "emise",
       total_ht: rawTotal,
       tva: 0,
       total_ttc: rawTotal,
@@ -166,12 +190,12 @@ export const BillingView: React.FC<BillingViewProps> = ({
       part_patient: patientPart,
       items: newInvoiceData.items.map((it, idx) => ({
         id: `item-${Date.now()}-${idx}`,
-        ...it
-      }))
+        ...it,
+      })),
     });
 
     setIsCreatingInvoice(false);
-    syncInvoiceCreate(created);
+    void syncInvoiceCreate(created).then(refreshAfterBackendWrite);
   };
 
   const filteredInvoices = invoices.filter((inv) => {
@@ -179,13 +203,12 @@ export const BillingView: React.FC<BillingViewProps> = ({
     const matchSearch =
       inv.numero.toLowerCase().includes(q) ||
       inv.patient_nom.toLowerCase().includes(q);
-    const matchStatus = statusFilter === 'all' || inv.statut === statusFilter;
+    const matchStatus = statusFilter === "all" || inv.statut === statusFilter;
     return matchSearch && matchStatus;
   });
 
   return (
     <div className="space-y-4">
-      
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
         <div>
@@ -193,19 +216,26 @@ export const BillingView: React.FC<BillingViewProps> = ({
             Caisse, Facturation & Règlements
           </h1>
           <p className="text-xs text-slate-500">
-            Émission des factures médicales, encaissement multi-moyens (Espèces, Carte, Mobile Money, Tiers-payant) et reçus
+            Émission des factures médicales, encaissement multi-moyens (Espèces,
+            Carte, Mobile Money, Tiers-payant) et reçus
           </p>
         </div>
 
         <button
           onClick={() => {
             if (patients.length > 0) {
-              setNewInvoiceData(prev => ({
+              setNewInvoiceData((prev) => ({
                 ...prev,
                 patient_id: patients[0].id,
                 items: [
-                  { type: 'consultation', description: 'Consultation Médecine Générale', quantite: 1, prix_unitaire: 25, total: 25 }
-                ]
+                  {
+                    type: "consultation",
+                    description: "Consultation Médecine Générale",
+                    quantite: 1,
+                    prix_unitaire: 25,
+                    total: 25,
+                  },
+                ],
               }));
             }
             setIsCreatingInvoice(true);
@@ -220,7 +250,9 @@ export const BillingView: React.FC<BillingViewProps> = ({
       {/* Financial KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Recettes Totales Encaissées</span>
+          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
+            Recettes Totales Encaissées
+          </span>
           <div className="text-2xl font-bold text-emerald-700 font-['Josefin_Sans'] mt-2">
             {totalCollected.toLocaleString()} {settings.devise}
           </div>
@@ -230,7 +262,9 @@ export const BillingView: React.FC<BillingViewProps> = ({
         </div>
 
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Restes à Recouvrer (Créances)</span>
+          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
+            Restes à Recouvrer (Créances)
+          </span>
           <div className="text-2xl font-bold text-rose-600 font-['Josefin_Sans'] mt-2">
             {totalPending.toLocaleString()} {settings.devise}
           </div>
@@ -240,7 +274,9 @@ export const BillingView: React.FC<BillingViewProps> = ({
         </div>
 
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Volume Global Facturé</span>
+          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
+            Volume Global Facturé
+          </span>
           <div className="text-2xl font-bold text-slate-900 font-['Josefin_Sans'] mt-2">
             {totalInvoiced.toLocaleString()} {settings.devise}
           </div>
@@ -253,18 +289,22 @@ export const BillingView: React.FC<BillingViewProps> = ({
       {/* Tabs */}
       <div className="flex items-center gap-2 border-b border-slate-200">
         <button
-          onClick={() => setActiveTab('invoices')}
+          onClick={() => setActiveTab("invoices")}
           className={`pb-3 px-4 font-bold text-xs border-b-2 transition-all flex items-center gap-1.5 ${
-            activeTab === 'invoices' ? 'border-teal-600 text-teal-700' : 'border-transparent text-slate-500 hover:text-slate-900'
+            activeTab === "invoices"
+              ? "border-teal-600 text-teal-700"
+              : "border-transparent text-slate-500 hover:text-slate-900"
           }`}
         >
           <Receipt className="w-4 h-4" />
           <span>Factures Médicales ({invoices.length})</span>
         </button>
         <button
-          onClick={() => setActiveTab('payments')}
+          onClick={() => setActiveTab("payments")}
           className={`pb-3 px-4 font-bold text-xs border-b-2 transition-all flex items-center gap-1.5 ${
-            activeTab === 'payments' ? 'border-teal-600 text-teal-700' : 'border-transparent text-slate-500 hover:text-slate-900'
+            activeTab === "payments"
+              ? "border-teal-600 text-teal-700"
+              : "border-transparent text-slate-500 hover:text-slate-900"
           }`}
         >
           <Wallet className="w-4 h-4" />
@@ -273,7 +313,7 @@ export const BillingView: React.FC<BillingViewProps> = ({
       </div>
 
       {/* TAB 1: INVOICES */}
-      {activeTab === 'invoices' && (
+      {activeTab === "invoices" && (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-3 bg-white p-4 rounded-xl border border-slate-200 text-xs">
             <div className="relative flex-1 min-w-[220px]">
@@ -319,13 +359,20 @@ export const BillingView: React.FC<BillingViewProps> = ({
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredInvoices.map((inv) => (
-                    <tr key={inv.id} className="hover:bg-slate-50 transition-colors">
+                    <tr
+                      key={inv.id}
+                      className="hover:bg-slate-50 transition-colors"
+                    >
                       <td className="py-3.5 px-4 font-mono font-bold text-teal-800">
                         {inv.numero}
                       </td>
                       <td className="py-3.5 px-4">
-                        <div className="font-bold text-slate-900">{inv.patient_nom}</div>
-                        <span className="text-[11px] font-mono text-slate-400">{inv.patient_numero}</span>
+                        <div className="font-bold text-slate-900">
+                          {inv.patient_nom}
+                        </div>
+                        <span className="text-[11px] font-mono text-slate-400">
+                          {inv.patient_numero}
+                        </span>
                       </td>
                       <td className="py-3.5 px-4 text-slate-600">
                         {inv.date_emission}
@@ -337,19 +384,27 @@ export const BillingView: React.FC<BillingViewProps> = ({
                         {inv.montant_paye} {settings.devise}
                       </td>
                       <td className="py-3.5 px-4 text-right">
-                        <span className={`font-bold ${inv.reste_a_payer > 0 ? 'text-rose-600' : 'text-slate-400'}`}>
+                        <span
+                          className={`font-bold ${inv.reste_a_payer > 0 ? "text-rose-600" : "text-slate-400"}`}
+                        >
                           {inv.reste_a_payer} {settings.devise}
                         </span>
                       </td>
                       <td className="py-3.5 px-4">
-                        <span className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] ${
-                          inv.statut === 'payee'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : inv.statut === 'partiellement_payee'
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-amber-100 text-amber-800'
-                        }`}>
-                          {inv.statut === 'payee' ? 'RÉGLÉE' : inv.statut === 'partiellement_payee' ? 'PARTIEL' : 'À PAYER'}
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] ${
+                            inv.statut === "payee"
+                              ? "bg-emerald-100 text-emerald-800"
+                              : inv.statut === "partiellement_payee"
+                                ? "bg-blue-100 text-blue-800"
+                                : "bg-amber-100 text-amber-800"
+                          }`}
+                        >
+                          {inv.statut === "payee"
+                            ? "RÉGLÉE"
+                            : inv.statut === "partiellement_payee"
+                              ? "PARTIEL"
+                              : "À PAYER"}
                         </span>
                       </td>
                       <td className="py-3.5 px-4 text-right">
@@ -365,7 +420,13 @@ export const BillingView: React.FC<BillingViewProps> = ({
                           )}
                           {onPrintDocument && (
                             <button
-                              onClick={() => onPrintDocument('invoice', inv, 'Facture Médicale')}
+                              onClick={() =>
+                                onPrintDocument(
+                                  "invoice",
+                                  inv,
+                                  "Facture Médicale",
+                                )
+                              }
                               className="p-1.5 text-slate-600 hover:bg-slate-200 rounded-lg"
                               title="Imprimer Facture"
                             >
@@ -384,7 +445,7 @@ export const BillingView: React.FC<BillingViewProps> = ({
       )}
 
       {/* TAB 2: PAYMENTS JOURNAL */}
-      {activeTab === 'payments' && (
+      {activeTab === "payments" && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
@@ -417,7 +478,7 @@ export const BillingView: React.FC<BillingViewProps> = ({
                       </span>
                     </td>
                     <td className="py-3.5 px-4 font-mono text-slate-600">
-                      {p.reference_transaction || '—'}
+                      {p.reference_transaction || "—"}
                     </td>
                     <td className="py-3.5 px-4 text-right font-bold text-emerald-700 text-sm font-['Josefin_Sans']">
                       {p.montant} {settings.devise}
@@ -425,7 +486,13 @@ export const BillingView: React.FC<BillingViewProps> = ({
                     <td className="py-3.5 px-4 text-right">
                       {onPrintDocument && (
                         <button
-                          onClick={() => onPrintDocument('payment_receipt', p, 'Reçu d’Encaissement Médical')}
+                          onClick={() =>
+                            onPrintDocument(
+                              "payment_receipt",
+                              p,
+                              "Reçu d’Encaissement Médical",
+                            )
+                          }
                           className="px-2.5 py-1 text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg font-semibold inline-flex items-center gap-1"
                         >
                           <Printer className="w-3 h-3" /> Reçu
@@ -449,7 +516,10 @@ export const BillingView: React.FC<BillingViewProps> = ({
                 <h3 className="text-base font-bold text-slate-900 font-['Josefin_Sans']">
                   Encaisser un Règlement
                 </h3>
-                <p className="text-xs text-slate-500">Facture {selectedInvoiceForPayment.numero} • {selectedInvoiceForPayment.patient_nom}</p>
+                <p className="text-xs text-slate-500">
+                  Facture {selectedInvoiceForPayment.numero} •{" "}
+                  {selectedInvoiceForPayment.patient_nom}
+                </p>
               </div>
               <button
                 onClick={() => setSelectedInvoiceForPayment(null)}
@@ -459,49 +529,79 @@ export const BillingView: React.FC<BillingViewProps> = ({
               </button>
             </div>
 
-            <form onSubmit={handleRecordPayment} className="p-4 space-y-4 text-xs">
+            <form
+              onSubmit={handleRecordPayment}
+              className="p-4 space-y-4 text-xs"
+            >
               <div className="bg-teal-50 p-4 rounded-xl border border-teal-100 flex justify-between items-center">
-                <span className="font-semibold text-teal-900">Reste à régler :</span>
+                <span className="font-semibold text-teal-900">
+                  Reste à régler :
+                </span>
                 <span className="text-xl font-bold text-teal-800 font-['Josefin_Sans']">
                   {selectedInvoiceForPayment.reste_a_payer} {settings.devise}
                 </span>
               </div>
 
               <div>
-                <label className="font-semibold text-slate-700 block mb-1">Montant à Encaisser ({settings.devise}) *</label>
+                <label className="font-semibold text-slate-700 block mb-1">
+                  Montant à Encaisser ({settings.devise}) *
+                </label>
                 <input
                   type="number"
                   step="0.01"
                   max={selectedInvoiceForPayment.reste_a_payer}
                   required
                   value={paymentForm.montant}
-                  onChange={(e) => setPaymentForm({ ...paymentForm, montant: Number(e.target.value) })}
+                  onChange={(e) =>
+                    setPaymentForm({
+                      ...paymentForm,
+                      montant: Number(e.target.value),
+                    })
+                  }
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-900 text-sm"
                 />
               </div>
 
               <div>
-                <label className="font-semibold text-slate-700 block mb-1">Mode de Paiement *</label>
+                <label className="font-semibold text-slate-700 block mb-1">
+                  Mode de Paiement *
+                </label>
                 <select
                   value={paymentForm.mode}
-                  onChange={(e) => setPaymentForm({ ...paymentForm, mode: e.target.value as any })}
+                  onChange={(e) =>
+                    setPaymentForm({
+                      ...paymentForm,
+                      mode: e.target.value as any,
+                    })
+                  }
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-800"
                 >
                   <option value="especes">Espèces (Cash)</option>
                   <option value="carte_bancaire">Carte Bancaire (TPE)</option>
-                  <option value="mobile_money">Mobile Money (Orange / Wave / MTN)</option>
+                  <option value="mobile_money">
+                    Mobile Money (Orange / Wave / MTN)
+                  </option>
                   <option value="virement">Virement Bancaire</option>
                   <option value="cheque">Chèque</option>
-                  <option value="tiers_payant">Prise en charge Assurance / Mutuelle</option>
+                  <option value="tiers_payant">
+                    Prise en charge Assurance / Mutuelle
+                  </option>
                 </select>
               </div>
 
               <div>
-                <label className="font-semibold text-slate-700 block mb-1">Référence / N° Transaction (facultatif)</label>
+                <label className="font-semibold text-slate-700 block mb-1">
+                  Référence / N° Transaction (facultatif)
+                </label>
                 <input
                   type="text"
                   value={paymentForm.reference_transaction}
-                  onChange={(e) => setPaymentForm({ ...paymentForm, reference_transaction: e.target.value })}
+                  onChange={(e) =>
+                    setPaymentForm({
+                      ...paymentForm,
+                      reference_transaction: e.target.value,
+                    })
+                  }
                   placeholder="Ex: TRX-98234 / Chèque N°77654"
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg"
                 />
@@ -537,7 +637,9 @@ export const BillingView: React.FC<BillingViewProps> = ({
                 <h3 className="text-base font-bold text-slate-900 font-['Josefin_Sans']">
                   Nouvelle Facture Médicale
                 </h3>
-                <p className="text-xs text-slate-500">Ajout d'actes, consultations, analyses et médicaments</p>
+                <p className="text-xs text-slate-500">
+                  Ajout d'actes, consultations, analyses et médicaments
+                </p>
               </div>
               <button
                 onClick={() => setIsCreatingInvoice(false)}
@@ -547,18 +649,29 @@ export const BillingView: React.FC<BillingViewProps> = ({
               </button>
             </div>
 
-            <form onSubmit={handleCreateInvoice} className="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
+            <form
+              onSubmit={handleCreateInvoice}
+              className="flex-1 overflow-y-auto p-4 space-y-4 text-xs"
+            >
               <div>
-                <label className="font-semibold text-slate-700 block mb-1">Patient à Facturer *</label>
+                <label className="font-semibold text-slate-700 block mb-1">
+                  Patient à Facturer *
+                </label>
                 <select
                   required
                   value={newInvoiceData.patient_id}
-                  onChange={(e) => setNewInvoiceData({ ...newInvoiceData, patient_id: e.target.value })}
+                  onChange={(e) =>
+                    setNewInvoiceData({
+                      ...newInvoiceData,
+                      patient_id: e.target.value,
+                    })
+                  }
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-medium"
                 >
-                  {patients.map(p => (
+                  {patients.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.nom} {p.prenom} ({p.numero}) {p.assure ? `[Assuré: ${p.assurance_nom}]` : ''}
+                      {p.nom} {p.prenom} ({p.numero}){" "}
+                      {p.assure ? `[Assuré: ${p.assurance_nom}]` : ""}
                     </option>
                   ))}
                 </select>
@@ -567,25 +680,45 @@ export const BillingView: React.FC<BillingViewProps> = ({
               {/* Add item triggers */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-800">Lignes de Prestations</span>
+                  <span className="font-bold text-slate-800">
+                    Lignes de Prestations
+                  </span>
                   <div className="flex gap-2">
                     <button
                       type="button"
-                      onClick={() => handleAddItemToInvoice('Consultation Spécialiste', 35, 'consultation')}
+                      onClick={() =>
+                        handleAddItemToInvoice(
+                          "Consultation Spécialiste",
+                          35,
+                          "consultation",
+                        )
+                      }
                       className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded"
                     >
                       + Consultation (35 {settings.devise})
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleAddItemToInvoice('Bilan Sanguin NFS + CRP', 18, 'examen')}
+                      onClick={() =>
+                        handleAddItemToInvoice(
+                          "Bilan Sanguin NFS + CRP",
+                          18,
+                          "examen",
+                        )
+                      }
                       className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded"
                     >
                       + Examen Labo (18 {settings.devise})
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleAddItemToInvoice('Pansement / Soin infirmier', 10, 'acte')}
+                      onClick={() =>
+                        handleAddItemToInvoice(
+                          "Pansement / Soin infirmier",
+                          10,
+                          "acte",
+                        )
+                      }
                       className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded"
                     >
                       + Soin infirmier (10 {settings.devise})
@@ -595,7 +728,10 @@ export const BillingView: React.FC<BillingViewProps> = ({
 
                 <div className="space-y-2">
                   {newInvoiceData.items.map((it, idx) => (
-                    <div key={idx} className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between gap-3">
+                    <div
+                      key={idx}
+                      className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between gap-3"
+                    >
                       <div className="flex-1">
                         <input
                           type="text"
@@ -603,7 +739,10 @@ export const BillingView: React.FC<BillingViewProps> = ({
                           onChange={(e) => {
                             const copy = [...newInvoiceData.items];
                             copy[idx].description = e.target.value;
-                            setNewInvoiceData({ ...newInvoiceData, items: copy });
+                            setNewInvoiceData({
+                              ...newInvoiceData,
+                              items: copy,
+                            });
                           }}
                           className="w-full px-2 py-1 bg-white border rounded font-semibold text-slate-800 text-xs"
                         />
@@ -616,8 +755,12 @@ export const BillingView: React.FC<BillingViewProps> = ({
                           onChange={(e) => {
                             const copy = [...newInvoiceData.items];
                             copy[idx].quantite = Number(e.target.value);
-                            copy[idx].total = copy[idx].quantite * copy[idx].prix_unitaire;
-                            setNewInvoiceData({ ...newInvoiceData, items: copy });
+                            copy[idx].total =
+                              copy[idx].quantite * copy[idx].prix_unitaire;
+                            setNewInvoiceData({
+                              ...newInvoiceData,
+                              items: copy,
+                            });
                           }}
                           placeholder="Qté"
                           className="w-full px-2 py-1 bg-white border rounded text-center"
@@ -630,8 +773,12 @@ export const BillingView: React.FC<BillingViewProps> = ({
                           onChange={(e) => {
                             const copy = [...newInvoiceData.items];
                             copy[idx].prix_unitaire = Number(e.target.value);
-                            copy[idx].total = copy[idx].quantite * copy[idx].prix_unitaire;
-                            setNewInvoiceData({ ...newInvoiceData, items: copy });
+                            copy[idx].total =
+                              copy[idx].quantite * copy[idx].prix_unitaire;
+                            setNewInvoiceData({
+                              ...newInvoiceData,
+                              items: copy,
+                            });
                           }}
                           placeholder="PU"
                           className="w-full px-2 py-1 bg-white border rounded text-right font-bold"
@@ -655,13 +802,22 @@ export const BillingView: React.FC<BillingViewProps> = ({
               {/* Tiers payant assurance */}
               <div className="p-4 bg-teal-50/60 rounded-xl border border-teal-100 flex items-center justify-between">
                 <div>
-                  <span className="font-bold text-teal-900 block">Prise en charge Mutuelle / Tiers-Payant (%)</span>
-                  <span className="text-[11px] text-teal-700">Déduit directement de la part patient</span>
+                  <span className="font-bold text-teal-900 block">
+                    Prise en charge Mutuelle / Tiers-Payant (%)
+                  </span>
+                  <span className="text-[11px] text-teal-700">
+                    Déduit directement de la part patient
+                  </span>
                 </div>
                 <div className="w-28">
                   <select
                     value={newInvoiceData.prise_en_charge_part_assurance}
-                    onChange={(e) => setNewInvoiceData({ ...newInvoiceData, prise_en_charge_part_assurance: Number(e.target.value) })}
+                    onChange={(e) =>
+                      setNewInvoiceData({
+                        ...newInvoiceData,
+                        prise_en_charge_part_assurance: Number(e.target.value),
+                      })
+                    }
                     className="w-full px-3 py-1.5 bg-white border border-teal-200 rounded-lg font-bold text-teal-800"
                   >
                     <option value={0}>0% (100% Patient)</option>
@@ -675,17 +831,24 @@ export const BillingView: React.FC<BillingViewProps> = ({
 
               {/* Calculated Totals Summary */}
               {(() => {
-                const { rawTotal, insurancePart, patientPart } = calculateInvoiceTotals();
+                const { rawTotal, insurancePart, patientPart } =
+                  calculateInvoiceTotals();
                 return (
-                  <div className="bg-slate-900 text-white p-4 rounded-xl flex justify-between items-center text-xs">
+                  <div className="bg-teal-50/60 p-4 rounded-xl flex justify-between items-center text-xs">
                     <div>
-                      <span className="text-slate-400 block">Total Prestations : {rawTotal} {settings.devise}</span>
+                      <span className="text-slate-400 block">
+                        Total Prestations : {rawTotal} {settings.devise}
+                      </span>
                       {insurancePart > 0 && (
-                        <span className="text-teal-300 block">Part Assurance : -{insurancePart} {settings.devise}</span>
+                        <span className="text-teal-300 block">
+                          Part Assurance : -{insurancePart} {settings.devise}
+                        </span>
                       )}
                     </div>
                     <div className="text-right">
-                      <span className="text-slate-400 block">Net à payer par le patient</span>
+                      <span className="text-slate-400 block">
+                        Net à payer par le patient
+                      </span>
                       <span className="text-xl font-bold text-teal-400 font-['Josefin_Sans']">
                         {patientPart} {settings.devise}
                       </span>
@@ -713,7 +876,6 @@ export const BillingView: React.FC<BillingViewProps> = ({
           </div>
         </div>
       )}
-
     </div>
   );
 };

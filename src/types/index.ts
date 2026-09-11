@@ -1,23 +1,23 @@
 export type UserRole =
-  | 'admin'
-  | 'doctor'
-  | 'receptionist'
-  | 'lab_tech'
-  | 'pharmacist'
-  | 'cashier'
-  | 'medecin'
-  | 'infirmier'
-  | 'receptionniste'
-  | 'pharmacien'
-  | 'laborantin'
-  | 'caissier';
+  | "admin"
+  | "doctor"
+  | "receptionist"
+  | "lab_tech"
+  | "pharmacist"
+  | "cashier"
+  | "medecin"
+  | "infirmier"
+  | "receptionniste"
+  | "pharmacien"
+  | "laborantin"
+  | "caissier";
 
 export type PrintDocumentType =
-  | 'prescription'
-  | 'invoice'
-  | 'lab_result'
-  | 'medical_record'
-  | 'payment_receipt';
+  | "prescription"
+  | "invoice"
+  | "lab_result"
+  | "medical_record"
+  | "payment_receipt";
 
 export interface User {
   id: string;
@@ -27,7 +27,7 @@ export interface User {
   role: UserRole;
   telephone?: string;
   avatar?: string;
-  statut?: 'actif' | 'inactif';
+  statut?: "actif" | "inactif";
   actif?: boolean;
   date_creation: string;
   derniere_connexion?: string;
@@ -41,7 +41,7 @@ export interface Patient {
   numero: string; // e.g. PAT-2026-0042
   nom: string;
   prenom: string;
-  sexe: 'M' | 'F' | 'Autre';
+  sexe: "M" | "F" | "Autre";
   date_naissance: string;
   age?: number;
   telephone: string;
@@ -51,7 +51,16 @@ export interface Patient {
   personne_urgence_nom: string;
   personne_urgence_tel: string;
   personne_urgence_lien?: string;
-  groupe_sanguin: 'A+' | 'A-' | 'B+' | 'B-' | 'AB+' | 'AB-' | 'O+' | 'O-' | 'Inconnu';
+  groupe_sanguin:
+    | "A+"
+    | "A-"
+    | "B+"
+    | "B-"
+    | "AB+"
+    | "AB-"
+    | "O+"
+    | "O-"
+    | "Inconnu";
   allergies: string[];
   antecedents_medicaux: string[];
   antecedents_chirurgicaux?: string[];
@@ -60,7 +69,7 @@ export interface Patient {
   assure?: boolean;
   assurance_nom?: string;
   assurance_numero?: string;
-  statut: 'actif' | 'archive';
+  statut: "actif" | "archive";
   date_creation: string;
   derniere_visite?: string;
 }
@@ -72,7 +81,7 @@ export interface MedicalService {
   description: string;
   responsable_id?: string;
   responsable_nom?: string;
-  statut: 'actif' | 'inactif';
+  statut: "actif" | "inactif";
   tarif_consultation: number;
 }
 
@@ -95,11 +104,17 @@ export interface Doctor {
   heures_fin?: string;
   tarif_consultation?: number;
   bureau?: string;
-  statut?: 'actif' | 'inactif';
+  statut?: "actif" | "inactif";
   avatar?: string;
 }
 
-export type AppointmentStatus = 'programme' | 'confirme' | 'en_attente' | 'en_consultation' | 'termine' | 'annule';
+export type AppointmentStatus =
+  | "programme"
+  | "confirme"
+  | "en_attente"
+  | "en_consultation"
+  | "termine"
+  | "annule";
 
 export interface Appointment {
   id: string;
@@ -114,7 +129,7 @@ export interface Appointment {
   heure: string; // HH:mm
   duree_minutes: number;
   motif: string;
-  priorite: 'normale' | 'urgente' | 'suivi';
+  priorite: "normale" | "urgente" | "suivi";
   statut: AppointmentStatus;
   notes?: string;
   date_creation: string;
@@ -160,7 +175,11 @@ export interface Consultation {
   date_creation: string;
 }
 
-export type PrescriptionStatus = 'brouillon' | 'validee' | 'delivree' | 'annulee';
+export type PrescriptionStatus =
+  | "brouillon"
+  | "validee"
+  | "delivree"
+  | "annulee";
 
 export interface PrescriptionItem {
   id: string;
@@ -195,7 +214,14 @@ export interface Prescription {
   date_creation: string;
 }
 
-export type LabStatus = 'demandee' | 'en_cours' | 'prelevement' | 'analyse' | 'resultat_disponible' | 'validee' | 'annulee';
+export type LabStatus =
+  | "demandee"
+  | "en_cours"
+  | "prelevement"
+  | "analyse"
+  | "resultat_disponible"
+  | "validee"
+  | "annulee";
 
 export interface LabResultItem {
   parametre: string;
@@ -214,10 +240,19 @@ export interface LabRequest {
   patient_nom: string;
   doctor_id: string;
   doctor_nom: string;
+  examen_id?: string;
+  laboratoire_id?: string;
+  laboratoire_nom?: string;
   examen_code: string;
   examen_nom: string;
-  categorie: 'Hématologie' | 'Biochimie' | 'Microbiologie' | 'Immunologie' | 'Sérologie' | 'Parasitologie';
-  priorite: 'normale' | 'urgente';
+  categorie:
+    | "Hématologie"
+    | "Biochimie"
+    | "Microbiologie"
+    | "Immunologie"
+    | "Sérologie"
+    | "Parasitologie";
+  priorite: "normale" | "urgente";
   statut: LabStatus;
   renseignements_cliniques?: string;
   date_demande: string;
@@ -249,14 +284,14 @@ export interface Medication {
   emplacement: string;
   ordonnance_obligatoire?: boolean;
   sur_ordonnance_uniquement?: boolean;
-  statut?: 'disponible' | 'stock_faible' | 'rupture' | 'perime';
+  statut?: "disponible" | "stock_faible" | "rupture" | "perime";
 }
 
 export interface StockMovement {
   id: string;
   medicament_id: string;
   medicament_nom: string;
-  type: 'entree' | 'sortie' | 'delivrance' | 'ajustement' | 'perime' | 'perte';
+  type: "entree" | "sortie" | "delivrance" | "ajustement" | "perime" | "perte";
   quantite: number;
   stock_avant?: number;
   stock_apres?: number;
@@ -268,12 +303,18 @@ export interface StockMovement {
   heure?: string;
 }
 
-export type InvoiceStatus = 'emise' | 'brouillon' | 'impayee' | 'partiellement_payee' | 'payee' | 'annulee';
+export type InvoiceStatus =
+  | "emise"
+  | "brouillon"
+  | "impayee"
+  | "partiellement_payee"
+  | "payee"
+  | "annulee";
 
 export interface InvoiceItem {
   id: string;
   description: string;
-  type: 'consultation' | 'examen' | 'medicament' | 'acte' | 'autre';
+  type: "consultation" | "examen" | "medicament" | "acte" | "autre";
   quantite: number;
   prix_unitaire: number;
   total: number;
@@ -311,7 +352,15 @@ export interface Payment {
   patient_id?: string;
   patient_nom?: string;
   montant: number;
-  mode: 'especes' | 'carte' | 'carte_bancaire' | 'virement' | 'mobile_money' | 'assurance' | 'cheque' | 'tiers_payant';
+  mode:
+    | "especes"
+    | "carte"
+    | "carte_bancaire"
+    | "virement"
+    | "mobile_money"
+    | "assurance"
+    | "cheque"
+    | "tiers_payant";
   reference_transaction?: string;
   date: string;
   heure: string;
@@ -331,7 +380,7 @@ export interface AuditLog {
   heure: string;
   adresse_ip?: string;
   ip?: string;
-  statut?: 'succes' | 'alerte' | 'echec';
+  statut?: "succes" | "alerte" | "echec";
 }
 
 export interface ClinicSettings {
@@ -359,11 +408,17 @@ export interface Specialty {
 export interface MedicalHistory {
   id: string;
   patient_id: string;
-  type: 'antecedent' | 'chirurgie' | 'allergie' | 'chronique' | 'familial' | 'autre';
+  type:
+    | "antecedent"
+    | "chirurgie"
+    | "allergie"
+    | "chronique"
+    | "familial"
+    | "autre";
   description: string;
   date_diagnostic?: string;
   traitements_actuels?: string;
-  severite?: 'legere' | 'moderee' | 'severe';
+  severite?: "legere" | "moderee" | "severe";
   notes?: string;
 }
 
@@ -378,14 +433,21 @@ export interface MedicationBatch {
   quantite_restante: number;
   prix_achat?: number;
   fournisseur?: string;
-  statut?: 'actif' | 'perime' | 'epuise' | 'quarantaine';
+  statut?: "actif" | "perime" | "epuise" | "quarantaine";
 }
 
 export interface LabTest {
   id: string;
   code: string;
   nom: string;
-  categorie: 'Hématologie' | 'Biochimie' | 'Microbiologie' | 'Immunologie' | 'Sérologie' | 'Parasitologie' | 'Autre';
+  categorie:
+    | "Hématologie"
+    | "Biochimie"
+    | "Microbiologie"
+    | "Immunologie"
+    | "Sérologie"
+    | "Parasitologie"
+    | "Autre";
   description?: string;
   prix: number;
   delai_heures?: number;
@@ -398,7 +460,13 @@ export interface BillingItem {
   id: string;
   code: string;
   designation: string;
-  type: 'consultation' | 'examen' | 'medicament' | 'acte' | 'hospitalisation' | 'autre';
+  type:
+    | "consultation"
+    | "examen"
+    | "medicament"
+    | "acte"
+    | "hospitalisation"
+    | "autre";
   tarif: number;
   description?: string;
   tva_applicable?: boolean;
@@ -409,7 +477,7 @@ export interface SystemNotification {
   id: string;
   titre: string;
   message: string;
-  type: 'info' | 'succes' | 'alerte' | 'urgent';
+  type: "info" | "succes" | "alerte" | "urgent";
   user_id?: string;
   lu: boolean;
   date_creation: string;
@@ -423,5 +491,3 @@ export interface DjangoApiConfig {
   refreshToken?: string;
   lastConnected?: string;
 }
-
-

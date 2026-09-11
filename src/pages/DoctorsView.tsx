@@ -1,22 +1,17 @@
-import React, { useState, useEffect } from 'react';
 import {
-  Stethoscope,
+  Building2,
+  Mail,
+  Phone,
   Plus,
   Search,
-  Phone,
-  Mail,
-  Calendar,
-  Clock,
-  ShieldCheck,
-  Building2,
-  Award,
-  CheckCircle2,
-  DollarSign
-} from 'lucide-react';
-import { apiService } from '../services/apiService';
-import { syncDoctorCreate } from '../services/backendSync';
-import { toast } from '../components/ui/Toast';
-import { Doctor, MedicalService, ClinicSettings } from '../types';
+  Stethoscope,
+} from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { toast } from "../components/ui/Toast";
+import { apiService } from "../services/apiService";
+import { hydrateFromBackend, syncDoctorCreate } from "../services/backendSync";
+import { isBackendActive } from "../services/djangoApiClient";
+import { ClinicSettings, Doctor, MedicalService } from "../types";
 
 interface DoctorsViewProps {
   settings: ClinicSettings;
@@ -25,24 +20,24 @@ interface DoctorsViewProps {
 export const DoctorsView: React.FC<DoctorsViewProps> = ({ settings }) => {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [services, setServices] = useState<MedicalService[]>([]);
-  const [activeTab, setActiveTab] = useState<'doctors' | 'services'>('doctors');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [activeTab, setActiveTab] = useState<"doctors" | "services">("doctors");
+  const [searchTerm, setSearchTerm] = useState("");
 
   // Doctor Creation Modal
   const [isCreatingDoctor, setIsCreatingDoctor] = useState(false);
   const [newDoctor, setNewDoctor] = useState({
-    nom: '',
-    prenom: '',
-    titre: 'Dr.',
-    specialite: 'Médecine Générale',
-    service_id: '',
-    telephone: '+257 70 50 60 70',
-    email: '',
-    numero_ordre: 'OMB-2026-00199',
+    nom: "",
+    prenom: "",
+    titre: "Dr.",
+    specialite: "Médecine Générale",
+    service_id: "",
+    telephone: "+257 70 50 60 70",
+    email: "",
+    numero_ordre: "OMB-2026-00199",
     tarif_consultation: 25,
-    jours_disponibles: ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi'],
-    heures_debut: '08:30',
-    heures_fin: '17:30'
+    jours_disponibles: ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi"],
+    heures_debut: "08:30",
+    heures_fin: "17:30",
   });
 
   const loadData = () => {
@@ -53,38 +48,50 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ settings }) => {
   useEffect(() => {
     loadData();
     const handleUpdate = () => loadData();
-    window.addEventListener('medicare_data_updated', handleUpdate);
-    return () => window.removeEventListener('medicare_data_updated', handleUpdate);
+    window.addEventListener("medicare_data_updated", handleUpdate);
+    return () =>
+      window.removeEventListener("medicare_data_updated", handleUpdate);
   }, []);
 
   const handleCreateDoctor = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newDoctor.nom || !newDoctor.prenom) {
-      toast.error('Veuillez renseigner le nom et le prénom du médecin.');
+      toast.error("Veuillez renseigner le nom et le prénom du médecin.");
       return;
     }
 
-    const srv = services.find(s => s.id === newDoctor.service_id) || services[0];
+    const srv = services.find((s) => s.id === newDoctor.service_id);
+    if (!srv) {
+      toast.error(
+        "Aucun service backend disponible pour affecter ce praticien.",
+      );
+      return;
+    }
 
     const created = apiService.doctors.create({
       nom: newDoctor.nom,
       prenom: newDoctor.prenom,
       titre: newDoctor.titre,
       specialite: newDoctor.specialite,
-      service_id: srv?.id || 'srv-1',
-      service_nom: srv?.nom || 'Médecine Générale',
+      service_id: srv?.id || "srv-1",
+      service_nom: srv?.nom || "Médecine Générale",
       telephone: newDoctor.telephone,
-      email: newDoctor.email || `${newDoctor.prenom.toLowerCase()}.${newDoctor.nom.toLowerCase()}@medicare.bi`,
+      email:
+        newDoctor.email ||
+        `${newDoctor.prenom.toLowerCase()}.${newDoctor.nom.toLowerCase()}@medicare.bi`,
+      matricule: newDoctor.numero_ordre,
       numero_ordre: newDoctor.numero_ordre,
       tarif_consultation: Number(newDoctor.tarif_consultation),
-      statut: 'actif',
+      statut: "actif",
       jours_disponibles: newDoctor.jours_disponibles,
       heures_debut: newDoctor.heures_debut,
-      heures_fin: newDoctor.heures_fin
+      heures_fin: newDoctor.heures_fin,
     });
 
     setIsCreatingDoctor(false);
-    syncDoctorCreate(created);
+    void syncDoctorCreate(created).then(() => {
+      if (isBackendActive()) void hydrateFromBackend();
+    });
   };
 
   const filteredDoctors = doctors.filter((d) => {
@@ -99,7 +106,6 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ settings }) => {
 
   return (
     <div className="space-y-4">
-      
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
         <div>
@@ -107,14 +113,15 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ settings }) => {
             Corps Médical & Services de Soins
           </h1>
           <p className="text-xs text-slate-500">
-            Annuaire des praticiens, spécialités, plannings de consultation et départements
+            Annuaire des praticiens, spécialités, plannings de consultation et
+            départements
           </p>
         </div>
 
         <button
           onClick={() => {
             if (services.length > 0) {
-              setNewDoctor(prev => ({ ...prev, service_id: services[0].id }));
+              setNewDoctor((prev) => ({ ...prev, service_id: services[0].id }));
             }
             setIsCreatingDoctor(true);
           }}
@@ -128,18 +135,22 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ settings }) => {
       {/* Tabs */}
       <div className="flex items-center gap-2 border-b border-slate-200">
         <button
-          onClick={() => setActiveTab('doctors')}
+          onClick={() => setActiveTab("doctors")}
           className={`pb-3 px-4 font-bold text-xs border-b-2 transition-all flex items-center gap-1.5 ${
-            activeTab === 'doctors' ? 'border-teal-600 text-teal-700' : 'border-transparent text-slate-500 hover:text-slate-900'
+            activeTab === "doctors"
+              ? "border-teal-600 text-teal-700"
+              : "border-transparent text-slate-500 hover:text-slate-900"
           }`}
         >
           <Stethoscope className="w-4 h-4" />
           <span>Médecins & Praticiens ({doctors.length})</span>
         </button>
         <button
-          onClick={() => setActiveTab('services')}
+          onClick={() => setActiveTab("services")}
           className={`pb-3 px-4 font-bold text-xs border-b-2 transition-all flex items-center gap-1.5 ${
-            activeTab === 'services' ? 'border-teal-600 text-teal-700' : 'border-transparent text-slate-500 hover:text-slate-900'
+            activeTab === "services"
+              ? "border-teal-600 text-teal-700"
+              : "border-transparent text-slate-500 hover:text-slate-900"
           }`}
         >
           <Building2 className="w-4 h-4" />
@@ -148,7 +159,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ settings }) => {
       </div>
 
       {/* TAB 1: DOCTORS */}
-      {activeTab === 'doctors' && (
+      {activeTab === "doctors" && (
         <div className="space-y-4">
           <div className="bg-white p-4 rounded-xl border border-slate-200 text-xs">
             <div className="relative">
@@ -165,7 +176,10 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ settings }) => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {filteredDoctors.map((doc) => (
-              <div key={doc.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-4 hover:border-teal-300 transition-all">
+              <div
+                key={doc.id}
+                className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-4 hover:border-teal-300 transition-all"
+              >
                 <div className="flex items-start gap-3.5">
                   <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center font-bold text-base shadow-xs shrink-0">
                     <Stethoscope className="w-6 h-6" />
@@ -173,18 +187,24 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ settings }) => {
                   <div>
                     <div className="flex items-center gap-1.5">
                       <span className="font-bold text-slate-900 text-sm">
-                        {doc.titre || 'Dr.'} {doc.prenom} {doc.nom}
+                        {doc.titre || "Dr."} {doc.prenom} {doc.nom}
                       </span>
                     </div>
-                    <span className="text-xs font-semibold text-teal-700 block mt-0.5">{doc.specialite}</span>
-                    <span className="text-[11px] text-slate-400 font-mono">N° {doc.numero_ordre}</span>
+                    <span className="text-xs font-semibold text-teal-700 block mt-0.5">
+                      {doc.specialite}
+                    </span>
+                    <span className="text-[11px] text-slate-400 font-mono">
+                      N° {doc.numero_ordre}
+                    </span>
                   </div>
                 </div>
 
                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1.5 text-slate-600">
                   <div className="flex items-center justify-between">
                     <span className="text-slate-400">Département:</span>
-                    <span className="font-semibold text-slate-800">{doc.service_nom}</span>
+                    <span className="font-semibold text-slate-800">
+                      {doc.service_nom}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-slate-400">Tarif Consultation:</span>
@@ -194,7 +214,9 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ settings }) => {
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-slate-400">Disponibilité:</span>
-                    <span className="font-mono font-medium text-slate-700">{doc.heures_debut} - {doc.heures_fin}</span>
+                    <span className="font-mono font-medium text-slate-700">
+                      {doc.heures_debut} - {doc.heures_fin}
+                    </span>
                   </div>
                 </div>
 
@@ -211,8 +233,11 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ settings }) => {
 
                 <div className="pt-3 border-t border-slate-100 flex flex-wrap gap-1">
                   {(doc.jours_disponibles || []).map((j, i) => (
-                    <span key={i} className="px-2 py-0.5 bg-slate-100 rounded text-[10px] font-medium text-slate-600">
-                      {typeof j === 'string' ? j.slice(0, 3) : j}
+                    <span
+                      key={i}
+                      className="px-2 py-0.5 bg-slate-100 rounded text-[10px] font-medium text-slate-600"
+                    >
+                      {typeof j === "string" ? j.slice(0, 3) : j}
                     </span>
                   ))}
                 </div>
@@ -223,12 +248,15 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ settings }) => {
       )}
 
       {/* TAB 2: SERVICES */}
-      {activeTab === 'services' && (
+      {activeTab === "services" && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {services.map((srv) => {
-            const serviceDocs = doctors.filter(d => d.service_id === srv.id);
+            const serviceDocs = doctors.filter((d) => d.service_id === srv.id);
             return (
-              <div key={srv.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+              <div
+                key={srv.id}
+                className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3"
+              >
                 <div className="flex items-center justify-between">
                   <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center font-bold">
                     <Building2 className="w-5 h-5" />
@@ -239,8 +267,12 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ settings }) => {
                 </div>
 
                 <div>
-                  <h3 className="font-bold text-slate-900 text-base font-['Josefin_Sans']">{srv.nom}</h3>
-                  <p className="text-xs text-slate-500 mt-1">{srv.description}</p>
+                  <h3 className="font-bold text-slate-900 text-base font-['Josefin_Sans']">
+                    {srv.nom}
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {srv.description}
+                  </p>
                 </div>
 
                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs flex justify-between items-center">
@@ -264,7 +296,9 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ settings }) => {
                 <h3 className="text-base font-bold text-slate-900 font-['Josefin_Sans']">
                   Ajouter un Praticien
                 </h3>
-                <p className="text-xs text-slate-500">Profil médical et plannings de consultation</p>
+                <p className="text-xs text-slate-500">
+                  Profil médical et plannings de consultation
+                </p>
               </div>
               <button
                 onClick={() => setIsCreatingDoctor(false)}
@@ -274,13 +308,20 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ settings }) => {
               </button>
             </div>
 
-            <form onSubmit={handleCreateDoctor} className="p-4 space-y-3 text-xs">
+            <form
+              onSubmit={handleCreateDoctor}
+              className="p-4 space-y-3 text-xs"
+            >
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Titre</label>
+                  <label className="font-semibold text-slate-700 block mb-1">
+                    Titre
+                  </label>
                   <select
                     value={newDoctor.titre}
-                    onChange={(e) => setNewDoctor({ ...newDoctor, titre: e.target.value })}
+                    onChange={(e) =>
+                      setNewDoctor({ ...newDoctor, titre: e.target.value })
+                    }
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-bold"
                   >
                     <option value="Dr.">Dr.</option>
@@ -288,22 +329,30 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ settings }) => {
                   </select>
                 </div>
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Nom *</label>
+                  <label className="font-semibold text-slate-700 block mb-1">
+                    Nom *
+                  </label>
                   <input
                     type="text"
                     required
                     value={newDoctor.nom}
-                    onChange={(e) => setNewDoctor({ ...newDoctor, nom: e.target.value })}
+                    onChange={(e) =>
+                      setNewDoctor({ ...newDoctor, nom: e.target.value })
+                    }
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-bold"
                   />
                 </div>
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Prénom *</label>
+                  <label className="font-semibold text-slate-700 block mb-1">
+                    Prénom *
+                  </label>
                   <input
                     type="text"
                     required
                     value={newDoctor.prenom}
-                    onChange={(e) => setNewDoctor({ ...newDoctor, prenom: e.target.value })}
+                    onChange={(e) =>
+                      setNewDoctor({ ...newDoctor, prenom: e.target.value })
+                    }
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg"
                   />
                 </div>
@@ -311,24 +360,34 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ settings }) => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Spécialité *</label>
+                  <label className="font-semibold text-slate-700 block mb-1">
+                    Spécialité *
+                  </label>
                   <input
                     type="text"
                     required
                     value={newDoctor.specialite}
-                    onChange={(e) => setNewDoctor({ ...newDoctor, specialite: e.target.value })}
+                    onChange={(e) =>
+                      setNewDoctor({ ...newDoctor, specialite: e.target.value })
+                    }
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg"
                   />
                 </div>
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Service d'Affectation</label>
+                  <label className="font-semibold text-slate-700 block mb-1">
+                    Service d'Affectation
+                  </label>
                   <select
                     value={newDoctor.service_id}
-                    onChange={(e) => setNewDoctor({ ...newDoctor, service_id: e.target.value })}
+                    onChange={(e) =>
+                      setNewDoctor({ ...newDoctor, service_id: e.target.value })
+                    }
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg"
                   >
-                    {services.map(s => (
-                      <option key={s.id} value={s.id}>{s.nom}</option>
+                    {services.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.nom}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -336,21 +395,35 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ settings }) => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">N° Ordre / Immatriculation *</label>
+                  <label className="font-semibold text-slate-700 block mb-1">
+                    N° Ordre / Immatriculation *
+                  </label>
                   <input
                     type="text"
                     required
                     value={newDoctor.numero_ordre}
-                    onChange={(e) => setNewDoctor({ ...newDoctor, numero_ordre: e.target.value })}
+                    onChange={(e) =>
+                      setNewDoctor({
+                        ...newDoctor,
+                        numero_ordre: e.target.value,
+                      })
+                    }
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-mono"
                   />
                 </div>
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Tarif Consultation ({settings.devise})</label>
+                  <label className="font-semibold text-slate-700 block mb-1">
+                    Tarif Consultation ({settings.devise})
+                  </label>
                   <input
                     type="number"
                     value={newDoctor.tarif_consultation}
-                    onChange={(e) => setNewDoctor({ ...newDoctor, tarif_consultation: Number(e.target.value) })}
+                    onChange={(e) =>
+                      setNewDoctor({
+                        ...newDoctor,
+                        tarif_consultation: Number(e.target.value),
+                      })
+                    }
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-bold text-teal-800"
                   />
                 </div>
@@ -358,20 +431,28 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ settings }) => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Téléphone</label>
+                  <label className="font-semibold text-slate-700 block mb-1">
+                    Téléphone
+                  </label>
                   <input
                     type="tel"
                     value={newDoctor.telephone}
-                    onChange={(e) => setNewDoctor({ ...newDoctor, telephone: e.target.value })}
+                    onChange={(e) =>
+                      setNewDoctor({ ...newDoctor, telephone: e.target.value })
+                    }
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg"
                   />
                 </div>
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Email</label>
+                  <label className="font-semibold text-slate-700 block mb-1">
+                    Email
+                  </label>
                   <input
                     type="email"
                     value={newDoctor.email}
-                    onChange={(e) => setNewDoctor({ ...newDoctor, email: e.target.value })}
+                    onChange={(e) =>
+                      setNewDoctor({ ...newDoctor, email: e.target.value })
+                    }
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg"
                   />
                 </div>
@@ -396,7 +477,6 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ settings }) => {
           </div>
         </div>
       )}
-
     </div>
   );
 };

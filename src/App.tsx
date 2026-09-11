@@ -1,38 +1,48 @@
-import React, { useState, useEffect } from 'react';
-import { Sidebar } from './components/layout/Sidebar';
-import { Navbar } from './components/layout/Navbar';
-import { PatientJourneyBar } from './components/layout/PatientJourneyBar';
-import { PrintableDocumentModal } from './components/common/PrintableDocumentModal';
-import { Toaster } from './components/ui/Toast';
+import { useEffect, useState } from "react";
+import { PrintableDocumentModal } from "./components/common/PrintableDocumentModal";
+import { Navbar } from "./components/layout/Navbar";
+import { PatientJourneyBar } from "./components/layout/PatientJourneyBar";
+import { Sidebar } from "./components/layout/Sidebar";
+import { Toaster } from "./components/ui/Toast";
 
 // Pages
-import { LandingPage } from './pages/LandingPage';
-import { DashboardView } from './pages/DashboardView';
-import { PatientsView } from './pages/PatientsView';
-import { AppointmentsView } from './pages/AppointmentsView';
-import { ConsultationsView } from './pages/ConsultationsView';
-import { PrescriptionsView } from './pages/PrescriptionsView';
-import { LaboratoryView } from './pages/LaboratoryView';
-import { PharmacyView } from './pages/PharmacyView';
-import { BillingView } from './pages/BillingView';
-import { DoctorsView } from './pages/DoctorsView';
-import { ReportsView } from './pages/ReportsView';
-import { UsersView } from './pages/UsersView';
-import { SettingsView } from './pages/SettingsView';
+import { AppointmentsView } from "./pages/AppointmentsView";
+import { BillingView } from "./pages/BillingView";
+import { ConsultationsView } from "./pages/ConsultationsView";
+import { DashboardView } from "./pages/DashboardView";
+import { DoctorsView } from "./pages/DoctorsView";
+import { LaboratoryView } from "./pages/LaboratoryView";
+import { LandingPage } from "./pages/LandingPage";
+import { PatientsView } from "./pages/PatientsView";
+import { PharmacyView } from "./pages/PharmacyView";
+import { PrescriptionsView } from "./pages/PrescriptionsView";
+import { ReportsView } from "./pages/ReportsView";
+import { SettingsView } from "./pages/SettingsView";
+import { UsersView } from "./pages/UsersView";
 
-import { apiService } from './services/apiService';
-import { hydrateFromBackend, restoreLocalData } from './services/backendSync';
-import { isBackendActive, setBackendActive } from './services/djangoApiClient';
-import { User, ClinicSettings, PrintDocumentType } from './types';
+import { apiService } from "./services/apiService";
+import { hydrateFromBackend, restoreLocalData } from "./services/backendSync";
+import { isBackendActive, setBackendActive } from "./services/djangoApiClient";
+import { ClinicSettings, PrintDocumentType, User } from "./types";
 
 export default function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => apiService.auth.isAuthenticated());
-  const [currentView, setCurrentView] = useState<string>('dashboard');
-  const [currentUser, setCurrentUser] = useState<User>(() => apiService.users.getCurrentUser());
-  const [clinicSettings, setClinicSettings] = useState<ClinicSettings>(() => apiService.settings.get());
-  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() =>
+    apiService.auth.isAuthenticated(),
+  );
+  const [currentView, setCurrentView] = useState<string>("dashboard");
+  const [currentUser, setCurrentUser] = useState<User>(() =>
+    apiService.users.getCurrentUser(),
+  );
+  const [clinicSettings, setClinicSettings] = useState<ClinicSettings>(() =>
+    apiService.settings.get(),
+  );
+  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(
+    null,
+  );
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [pendingBackendEmail, setPendingBackendEmail] = useState<string | undefined>(undefined);
+  const [pendingBackendEmail, setPendingBackendEmail] = useState<
+    string | undefined
+  >(undefined);
 
   // Compteurs de la barre latérale, calculés à partir des données réelles
   // (celles-ci proviennent du backend dès que le compte est un compte backend).
@@ -42,16 +52,29 @@ export default function App() {
     labPending: number;
     lowStock: number;
     unpaidInvoices: number;
-  }>({ patients: 0, appointmentsToday: 0, labPending: 0, lowStock: 0, unpaidInvoices: 0 });
+  }>({
+    patients: 0,
+    appointmentsToday: 0,
+    labPending: 0,
+    lowStock: 0,
+    unpaidInvoices: 0,
+  });
 
   const refreshCounts = () => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date().toISOString().split("T")[0];
     setCounts({
       patients: apiService.patients.getAll().length,
-      appointmentsToday: apiService.appointments.getAll().filter(a => a.date === today).length,
-      labPending: apiService.lab.getAll().filter(r => r.statut === 'demandee').length,
-      lowStock: apiService.medications.getAll().filter(m => m.stock_actuel <= m.seuil_alerte).length,
-      unpaidInvoices: apiService.billing.getInvoices().filter(i => i.statut !== 'payee').length
+      appointmentsToday: apiService.appointments
+        .getAll()
+        .filter((a) => a.date === today).length,
+      labPending: apiService.lab.getAll().filter((r) => r.statut === "demandee")
+        .length,
+      lowStock: apiService.medications
+        .getAll()
+        .filter((m) => m.stock_actuel <= m.seuil_alerte).length,
+      unpaidInvoices: apiService.billing
+        .getInvoices()
+        .filter((i) => i.statut !== "payee").length,
     });
   };
 
@@ -63,9 +86,9 @@ export default function App() {
     title: string;
   }>({
     isOpen: false,
-    type: 'prescription',
+    type: "prescription",
     data: null,
-    title: ''
+    title: "",
   });
 
   useEffect(() => {
@@ -74,7 +97,7 @@ export default function App() {
       setClinicSettings(apiService.settings.get());
       refreshCounts();
     };
-    window.addEventListener('medicare_data_updated', handleUpdate);
+    window.addEventListener("medicare_data_updated", handleUpdate);
 
     // Au chargement, si une session backend est déjà active, on resynchronise les données ;
     // sinon on restaure les données locales (en cas de retour depuis un mode backend).
@@ -85,14 +108,15 @@ export default function App() {
     }
     refreshCounts();
 
-    return () => window.removeEventListener('medicare_data_updated', handleUpdate);
+    return () =>
+      window.removeEventListener("medicare_data_updated", handleUpdate);
   }, []);
 
   const handleLoginSuccess = (user: User) => {
     apiService.auth.setAuthenticatedUser(user);
     setCurrentUser(user);
     setIsAuthenticated(true);
-    setCurrentView('dashboard');
+    setCurrentView("dashboard");
     // Si l'utilisateur vient du backend, on privilégie ses données (le local reste masqué).
     if (isBackendActive()) {
       hydrateFromBackend();
@@ -106,21 +130,25 @@ export default function App() {
   const handleLogout = () => {
     apiService.auth.logout();
     setIsAuthenticated(false);
-    setCurrentView('dashboard');
+    setCurrentView("dashboard");
     setSelectedPatientId(null);
   };
-  const handlePrintDocument = (type: PrintDocumentType, data: any, title: string) => {
+  const handlePrintDocument = (
+    type: PrintDocumentType,
+    data: any,
+    title: string,
+  ) => {
     setPrintModal({
       isOpen: true,
       type,
       data,
-      title
+      title,
     });
   };
 
   const handleSelectPatient = (patientId: string) => {
     setSelectedPatientId(patientId);
-    setCurrentView('patients');
+    setCurrentView("patients");
   };
 
   const handleSwitchUser = (user: User) => {
@@ -137,7 +165,7 @@ export default function App() {
     setPendingBackendEmail(email || undefined);
     setCurrentUser(apiService.users.getCurrentUser());
     setIsAuthenticated(false);
-    setCurrentView('dashboard');
+    setCurrentView("dashboard");
     setSelectedPatientId(null);
   };
 
@@ -162,14 +190,13 @@ export default function App() {
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden font-['Josefin_Sans'] text-slate-800 antialiased selection:bg-blue-500 selection:text-white">
-      
       {/* Primary Sidebar */}
       <Sidebar
         currentView={currentView}
         onNavigate={(view) => {
           setCurrentView(view);
           setSidebarOpen(false);
-          if (view !== 'patients') {
+          if (view !== "patients") {
             setSelectedPatientId(null);
           }
         }}
@@ -183,14 +210,13 @@ export default function App() {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        
         {/* Top Navbar */}
         <Navbar
           currentView={currentView}
           currentUser={currentUser}
           settings={clinicSettings}
           onSelectPatient={handleSelectPatient}
-          onOpenSettings={() => setCurrentView('settings')}
+          onOpenSettings={() => setCurrentView("settings")}
           onSwitchUser={handleSwitchUser}
           onLogout={handleLogout}
           onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
@@ -205,7 +231,7 @@ export default function App() {
         {/* Dynamic Viewport */}
         <main className="flex-1 overflow-y-auto p-3">
           <div className="max-w-7xl mx-auto pb-3">
-            {currentView === 'dashboard' && (
+            {currentView === "dashboard" && (
               <DashboardView
                 onNavigate={setCurrentView}
                 onSelectPatient={handleSelectPatient}
@@ -213,71 +239,59 @@ export default function App() {
               />
             )}
 
-            {currentView === 'patients' && (
+            {currentView === "patients" && (
               <PatientsView
-                onNavigate={setCurrentView}
-                initialSelectedPatientId={selectedPatientId}
+                initialPatientId={selectedPatientId || undefined}
                 onPrintDocument={handlePrintDocument}
                 settings={clinicSettings}
               />
             )}
 
-            {currentView === 'appointments' && (
-              <AppointmentsView
-                onNavigate={setCurrentView}
-                settings={clinicSettings}
-              />
+            {currentView === "appointments" && (
+              <AppointmentsView settings={clinicSettings} />
             )}
 
-            {currentView === 'consultations' && (
+            {currentView === "consultations" && (
               <ConsultationsView
-                onNavigate={setCurrentView}
                 onPrintDocument={handlePrintDocument}
                 settings={clinicSettings}
               />
             )}
 
-            {currentView === 'prescriptions' && (
+            {currentView === "prescriptions" && (
               <PrescriptionsView
-                onNavigate={setCurrentView}
                 onPrintDocument={handlePrintDocument}
                 settings={clinicSettings}
               />
             )}
 
-            {currentView === 'lab' && (
+            {currentView === "lab" && (
               <LaboratoryView
                 onPrintDocument={handlePrintDocument}
                 settings={clinicSettings}
               />
             )}
 
-            {currentView === 'pharmacy' && (
-              <PharmacyView
-                settings={clinicSettings}
-              />
+            {currentView === "pharmacy" && (
+              <PharmacyView settings={clinicSettings} />
             )}
 
-            {currentView === 'billing' && (
+            {currentView === "billing" && (
               <BillingView
                 onPrintDocument={handlePrintDocument}
                 settings={clinicSettings}
               />
             )}
 
-            {currentView === 'doctors' && (
-              <DoctorsView
-                settings={clinicSettings}
-              />
+            {currentView === "doctors" && (
+              <DoctorsView settings={clinicSettings} />
             )}
 
-            {currentView === 'reports' && (
-              <ReportsView
-                settings={clinicSettings}
-              />
+            {currentView === "reports" && (
+              <ReportsView settings={clinicSettings} />
             )}
 
-            {currentView === 'users' && (
+            {currentView === "users" && (
               <UsersView
                 currentUser={currentUser}
                 onSwitchUser={handleSwitchUser}
@@ -286,7 +300,7 @@ export default function App() {
               />
             )}
 
-            {currentView === 'settings' && (
+            {currentView === "settings" && (
               <SettingsView
                 settings={clinicSettings}
                 onUpdateSettings={(newS) => setClinicSettings(newS)}
@@ -298,11 +312,13 @@ export default function App() {
         {/* Clean Utility Minimal Footer */}
         <footer className="h-10 px-4 sm:px-8 flex items-center justify-between text-[11px] text-slate-400 border-t border-slate-200 bg-white shrink-0 select-none">
           <div className="truncate">
-            MediCare Connect v1.0 • {clinicSettings?.nom || 'Centre Médical'}
+            MediCare Connect v1.0 • {clinicSettings?.nom || "Centre Médical"}
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span className="font-medium text-slate-600 hidden sm:inline">Opérationnel</span>
+            <span className="font-medium text-slate-600 hidden sm:inline">
+              Opérationnel
+            </span>
           </div>
         </footer>
       </div>
@@ -311,7 +327,7 @@ export default function App() {
       {printModal.isOpen && (
         <PrintableDocumentModal
           isOpen={printModal.isOpen}
-          onClose={() => setPrintModal(prev => ({ ...prev, isOpen: false }))}
+          onClose={() => setPrintModal((prev) => ({ ...prev, isOpen: false }))}
           type={printModal.type}
           data={printModal.data}
           settings={clinicSettings}
@@ -320,8 +336,6 @@ export default function App() {
       )}
 
       <Toaster />
-
     </div>
   );
 }
-
